@@ -1,0 +1,24 @@
+{
+  "name": "tiktok-ads-account-authorization-backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "check": "node --check server.js && node --check ecosystem.config.cjs",
+    "pm2:start": "pm2 start ecosystem.config.cjs",
+    "pm2:reload": "pm2 reload sponsor-krd-extension-api --update-env",
+    "pm2:logs": "pm2 logs sponsor-krd-extension-api"
+  },
+  "dependencies": {
+    "dotenv": "18.0.3",
+    "express": "5.2.1",
+    "express-rate-limit": "8.7.0",
+    "google-auth-library": "^11.1.0",
+    "helmet": "8.3.0",
+    "pg": "8.23.0"
+  }
+}

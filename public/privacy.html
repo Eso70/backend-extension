@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Privacy Policy for Sponsor.krd Extension for Chrome.">
+  <title>Privacy Policy | Sponsor.krd Extension</title>
+  <link rel="icon" type="image/png" href="/legal/logo.png">
+  <link rel="stylesheet" href="/legal/legal.css">
+</head>
+<body>
+  <header class="legal-topbar">
+    <a class="legal-brand" href="https://sponsor.krd/" rel="home"><img src="/legal/logo.png" alt=""><strong>Sponsor.krd Extension</strong></a>
+    <nav class="legal-nav" aria-label="Legal documents"><a href="/privacy" aria-current="page">Privacy</a><a href="/terms">Terms</a></nav>
+  </header>
+  <main class="legal-shell">
+    <header class="legal-hero">
+      <p class="legal-kicker">Sponsor.krd Extension</p>
+      <h1>Privacy Policy</h1>
+      <p class="legal-summary">This policy explains how Sponsor.krd Extension for Chrome and its authorization service access, use, store, and protect information.</p>
+      <p class="legal-meta"><span>Effective: September 25, 2026</span><span>Version: 2026-09-25</span></p>
+    </header>
+
+    <div class="legal-content">
+      <section class="legal-section">
+        <h2>1. Scope and operator</h2>
+        <p>This Privacy Policy applies to Sponsor.krd Extension for Chrome, the related authorization API, and the administrator tools used to control access. The service is operated by Sponsor.krd (“we,” “us,” or “our”).</p>
+        <p>Sponsor.krd Extension helps authorized users activate supported manual campaign settings in TikTok Ads Manager and limits use to advertiser accounts approved by the administrator.</p>
+      </section>
+
+      <section class="legal-section">
+        <h2>2. Information we process</h2>
+        <h3>Google account information</h3>
+        <p>When you choose “Continue with Google,” we request only the standard <strong>openid</strong>, <strong>email</strong>, and <strong>profile</strong> scopes. We receive and store your Google account identifier, verified email address, display name, and profile image URL. We do not receive or store your Google password. Google access and refresh tokens are not retained by the extension or our database.</p>
+
+        <h3>Authentication and access information</h3>
+        <p>We process a random extension session token, its expiration time, login and last-activity times, account status, administrator assignments, and security records needed to authenticate requests. The extension stores the session token and basic Google profile information in Chrome local storage. Our server stores only a cryptographic hash of the extension session token.</p>
+
+        <h3>TikTok advertiser information</h3>
+        <p>We process the numeric TikTok advertiser account ID visible in the active TikTok Ads Manager context. The advertiser ID is sent to our authorization server together with your extension session so we can determine whether that account is assigned to your email. We store assigned advertiser IDs and may store the most recent authorization result and activity timestamps.</p>
+
+        <h3>Campaign, page, and request data processed locally</h3>
+        <p>To perform the feature you request, the extension temporarily reads the active TikTok Ads Manager URL, campaign and draft identifiers, campaign draft request content, and a limited set of TikTok request headers needed to save the updated draft. This may include an authentication or CSRF header already present in your TikTok session.</p>
+        <p>This campaign content and these TikTok authentication headers are processed in extension memory or Chrome session storage. They are not sent to our authorization server. They are sent only to TikTok when the extension performs the user-requested campaign operation.</p>
+
+        <h3>Technical and security information</h3>
+        <p>Our server, reverse proxy, hosting provider, and security controls may process standard connection information such as IP address, request time, user agent, response status, and rate-limit events. The extension also keeps short-lived workflow states and error messages in Chrome session storage.</p>
+      </section>
+
+      <section class="legal-section">
+        <h2>3. How we use information</h2>
+        <ul>
+          <li>Authenticate users through Google and maintain secure sessions.</li>
+          <li>Show the signed-in account and provide the requested extension functionality.</li>
+          <li>Check whether a TikTok advertiser account is assigned to the signed-in email.</li>
+          <li>Process and save supported campaign changes requested by the user.</li>
+          <li>Prevent unauthorized access, abuse, fraud, and security incidents.</li>
+          <li>Operate, troubleshoot, maintain, and improve reliability.</li>
+          <li>Comply with legal obligations and enforce our Terms of Use.</li>
+        </ul>
+        <p>We do not sell personal information, use it for personalized advertising, or use Google user data for creditworthiness or lending decisions.</p>
+      </section>
+
+      <section class="legal-section legal-notice">
+        <h2>4. Google API Limited Use disclosure</h2>
+        <p>Sponsor.krd Extension’s use and transfer to any other app of information received from Google APIs will adhere to the Google API Services User Data Policy, including the Limited Use requirements.</p>
+      </section>
+
+      <section class="legal-section">
+        <h2>5. When information is shared</h2>
+        <p>We disclose information only as needed to operate the service:</p>
+        <ul>
+          <li><strong>Google:</strong> to complete the sign-in flow and verify identity.</li>
+          <li><strong>TikTok:</strong> campaign and request data is sent to TikTok only to carry out the action initiated by the user in TikTok Ads Manager.</li>
+          <li><strong>Infrastructure providers:</strong> hosting, database, networking, security, and backup providers may process data on our behalf under appropriate confidentiality and security obligations.</li>
+          <li><strong>Legal and safety:</strong> when reasonably necessary to comply with law, protect rights or safety, investigate abuse, or enforce agreements.</li>
+          <li><strong>Business transfer:</strong> as part of a merger, acquisition, financing, or asset transfer, subject to continued protection and applicable notice requirements.</li>
+        </ul>
+        <p>We do not permit service providers to use extension data for their own advertising purposes.</p>
+      </section>
+
+      <section class="legal-section">
+        <h2>6. Storage and retention</h2>
+        <ul>
+          <li>OAuth state and one-time login codes are short-lived and expire automatically.</li>
+          <li>Extension sessions normally expire after the configured session period, currently 30 days, and can be revoked when you sign out.</li>
+          <li>Temporary campaign workflow data in Chrome session storage is removed as workflows finish, tabs close, or the browser session ends.</li>
+          <li>Google profile data, advertiser-account assignments, and access history are retained while needed to provide and secure authorized access, or until the account is deleted, subject to legal and legitimate security retention requirements.</li>
+          <li>Infrastructure backups and security logs may remain for a limited additional period before scheduled deletion.</li>
+        </ul>
+      </section>
+
+      <section class="legal-section">
+        <h2>7. Security</h2>
+        <p>We use HTTPS in production, access controls, hashed session tokens, parameterized database queries, rate limiting, restrictive browser security headers, administrator authentication, CSRF protection, and limited OAuth scopes. No method of storage or transmission is completely secure, so we cannot guarantee absolute security.</p>
+      </section>
+
+      <section class="legal-section">
+        <h2>8. Your choices and deletion requests</h2>
+        <p>You can stop local collection by signing out and uninstalling the extension. Signing out revokes the active extension session and removes the locally stored authentication record.</p>
+        <p>You may request access, correction, or deletion of your stored Google profile and extension authorization records by contacting us at <a href="mailto:privacy@sponsor.krd">privacy@sponsor.krd</a>. We may need to verify the requesting email before fulfilling a request. Some limited security or legal records may be retained where required or permitted by law.</p>
+      </section>
+
+      <section class="legal-section">
+        <h2>9. International processing and children</h2>
+        <p>Information may be processed in countries where we or our infrastructure providers operate. We take reasonable steps to protect data in accordance with this policy and applicable law. The extension is intended for business users who are legally capable of managing advertising accounts and is not directed to children.</p>
+      </section>
+
+      <section class="legal-section">
+        <h2>10. Third-party services</h2>
+        <p>Google and TikTok process information under their own terms and privacy policies. Sponsor.krd Extension is not affiliated with or endorsed by Google, TikTok, or the Chrome Web Store. You should review the policies that apply to those services.</p>
+      </section>
+
+      <section class="legal-section">
+        <h2>11. Changes and contact</h2>
+        <p>We may update this policy when the extension, legal requirements, or data practices change. The effective date and version at the top identify the current policy. Material changes will be communicated through an appropriate product or listing notice.</p>
+        <p>Privacy questions and requests: <a href="mailto:privacy@sponsor.krd">privacy@sponsor.krd</a><br>Website: <a href="https://sponsor.krd/">https://sponsor.krd/</a></p>
+      </section>
+    </div>
+  </main>
+  <footer class="legal-footer">© 2026 Sponsor.krd · Sponsor.krd Extension</footer>
+</body>
+</html>
