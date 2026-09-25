@@ -1,4 +1,4 @@
-api.yourdomain.com {
+extension.sponsor.krd {
     encode zstd gzip
 
     header {

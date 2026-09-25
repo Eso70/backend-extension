@@ -343,7 +343,13 @@ async function getExtensionUserFromRequest(req) {
   );
   if (!result.rows[0]) return null;
   await Promise.all([
-    pool.query('UPDATE extension_sessions SET last_seen_at = NOW() WHERE token_hash = $1', [sha256(match[1])]),
+    pool.query(
+      `UPDATE extension_sessions
+          SET last_seen_at = NOW(),
+              expires_at = NOW() + ($2 * INTERVAL '1 day')
+        WHERE token_hash = $1`,
+      [sha256(match[1]), userSessionDays]
+    ),
     pool.query('UPDATE extension_users SET last_seen_at = NOW() WHERE id = $1', [result.rows[0].id])
   ]);
   return result.rows[0];
@@ -507,14 +513,14 @@ function requireCsrf(req, res, next) {
 
 function requireAllowedExtensionOrigin(req, res, next) {
   const origin = String(req.headers.origin || '');
-  if (allowedExtensionOrigins.size > 0 && !allowedExtensionOrigins.has(origin)) {
+  if (origin && allowedExtensionOrigins.size > 0 && !allowedExtensionOrigins.has(origin)) {
     res.status(403).json({ allowed: false, message: 'Extension origin is not allowed.' });
     return;
   }
 
   if (origin && (allowedExtensionOrigins.size === 0 || allowedExtensionOrigins.has(origin))) {
     res.setHeader('Access-Control-Allow-Origin', origin);
-    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
     res.setHeader('Vary', 'Origin');
   }
