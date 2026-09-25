@@ -243,6 +243,10 @@ app.use(helmet({
 app.use(express.json({ limit: '4kb', strict: true }));
 app.use(express.urlencoded({ extended: false, limit: '8kb' }));
 
+app.get('/about', (_req, res) => {
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  res.sendFile(path.join(__dirname, 'public', 'about.html'));
+});
 app.get('/privacy', (_req, res) => {
   res.setHeader('Cache-Control', 'public, max-age=3600');
   res.sendFile(path.join(__dirname, 'public', 'privacy.html'));
