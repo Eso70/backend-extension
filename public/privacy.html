@@ -34,7 +34,7 @@
         <p>When you choose “Continue with Google,” we request only the standard <strong>openid</strong>, <strong>email</strong>, and <strong>profile</strong> scopes. We receive and store your Google account identifier, verified email address, display name, and profile image URL. We do not receive or store your Google password. Google access and refresh tokens are not retained by the extension or our database.</p>
 
         <h3>Authentication and access information</h3>
-        <p>We process a random extension session token, its expiration time, login and last-activity times, account status, administrator assignments, and security records needed to authenticate requests. The extension stores the session token and basic Google profile information in Chrome local storage. Our server stores only a cryptographic hash of the extension session token.</p>
+        <p>We process a random extension session token, its expiration time, login and last-activity times, account status, administrator assignments, and security records needed to authenticate requests. The extension keeps the session token and basic Google profile information only in Chrome session storage, which is cleared when the browser session ends. Our server stores only a cryptographic hash of the extension session token.</p>
 
         <h3>TikTok advertiser information</h3>
         <p>We process the numeric TikTok advertiser account ID visible in the active TikTok Ads Manager context. The advertiser ID is sent to our authorization server together with your extension session so we can determine whether that account is assigned to your email. We store assigned advertiser IDs and may store the most recent authorization result and activity timestamps.</p>
@@ -83,7 +83,7 @@
         <h2>6. Storage and retention</h2>
         <ul>
           <li>OAuth state and one-time login codes are short-lived and expire automatically.</li>
-          <li>Extension sessions normally expire after the configured session period, currently 30 days, and can be revoked when you sign out.</li>
+          <li>Server-side extension sessions expire no later than one day after sign-in and can be revoked earlier when you sign out or an administrator disables your access. The browser removes its local copy when the browser session ends.</li>
           <li>Temporary campaign workflow data in Chrome session storage is removed as workflows finish, tabs close, or the browser session ends.</li>
           <li>Google profile data, advertiser-account assignments, and access history are retained while needed to provide and secure authorized access, or until the account is deleted, subject to legal and legitimate security retention requirements.</li>
           <li>Infrastructure backups and security logs may remain for a limited additional period before scheduled deletion.</li>

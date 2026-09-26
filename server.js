@@ -221,6 +221,16 @@ await pool.query(`
     EXECUTE FUNCTION enforce_extension_user_account_limit();
 `);
 
+// Enforce the current absolute session lifetime for records created by older
+// deployments, then remove anything that is already expired.
+await pool.query(
+  `UPDATE extension_sessions
+      SET expires_at = created_at + ($1 * INTERVAL '1 day')
+    WHERE expires_at > created_at + ($1 * INTERVAL '1 day')`,
+  [userSessionDays]
+);
+await pool.query('DELETE FROM extension_sessions WHERE expires_at <= NOW()');
+
 const app = express();
 app.disable('x-powered-by');
 if (isProduction) app.set('trust proxy', 1);
@@ -349,10 +359,9 @@ async function getExtensionUserFromRequest(req) {
   await Promise.all([
     pool.query(
       `UPDATE extension_sessions
-          SET last_seen_at = NOW(),
-              expires_at = NOW() + ($2 * INTERVAL '1 day')
+          SET last_seen_at = NOW()
         WHERE token_hash = $1`,
-      [sha256(match[1]), userSessionDays]
+      [sha256(match[1])]
     ),
     pool.query('UPDATE extension_users SET last_seen_at = NOW() WHERE id = $1', [result.rows[0].id])
   ]);
@@ -517,7 +526,7 @@ function requireCsrf(req, res, next) {
 
 function requireAllowedExtensionOrigin(req, res, next) {
   const origin = String(req.headers.origin || '');
-  if (origin && allowedExtensionOrigins.size > 0 && !allowedExtensionOrigins.has(origin)) {
+  if (allowedExtensionOrigins.size > 0 && !allowedExtensionOrigins.has(origin)) {
     res.status(403).json({ allowed: false, message: 'Extension origin is not allowed.' });
     return;
   }
@@ -735,7 +744,7 @@ function renderAdminPage(accounts, users, csrfToken, administratorEmail, adminis
                 </section>
                 <button class="add-account-toggle" type="button" data-add-account-toggle aria-expanded="false">${dashboardIcon('plus')}<span>زیادکردنی هەژماری نوێ</span><span class="toggle-chevron">${dashboardIcon('chevronDown')}</span></button>
                 <section class="new-account-panel" data-new-account-panel hidden>
-                  <label>ناسنامەی هەژماری ڕیکلامی<input name="newAdvertiserId" inputmode="numeric" pattern="[0-9]{5,32}" maxlength="32" placeholder="7494877923409756167"></label>
+                  <label>ناسنامەی هەژماری ڕیکلامی<input name="newAdvertiserId" inputmode="numeric" pattern="[0-9]{5,32}" maxlength="32" placeholder="1234567890123456789"></label>
                   <p>هەژمارەکە دەچالاکرێت و بۆ ئەم بەکارهێنەرە دیاری دەکرێت.</p>
                 </section>
               </div>
