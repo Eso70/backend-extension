@@ -17,6 +17,7 @@ const isProduction = process.env.NODE_ENV === 'production';
 const port = Number(process.env.PORT || 3033);
 const host = process.env.HOST || '127.0.0.1';
 const advertiserIdPattern = /^\d{5,32}$/;
+const extensionIdPattern = /^[a-p]{32}$/;
 const maxAdvertiserAccountsPerUser = 25;
 
 for (const name of [
@@ -137,6 +138,15 @@ await pool.query(`
     last_login_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );
+
+  CREATE TABLE IF NOT EXISTS allowed_extension_ids (
+    id BIGSERIAL PRIMARY KEY,
+    extension_id VARCHAR(32) NOT NULL UNIQUE CHECK (extension_id ~ '^[a-p]{32}$'),
+    label VARCHAR(100) NOT NULL DEFAULT '',
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
   CREATE UNIQUE INDEX IF NOT EXISTS extension_users_email_lower_idx
     ON extension_users (LOWER(email));
 
@@ -230,6 +240,22 @@ await pool.query(
   [userSessionDays]
 );
 await pool.query('DELETE FROM extension_sessions WHERE expires_at <= NOW()');
+
+const extensionIdCount = await pool.query('SELECT COUNT(*)::int AS count FROM allowed_extension_ids');
+if (Number(extensionIdCount.rows[0]?.count || 0) === 0) {
+  for (const origin of allowedExtensionOrigins) {
+    const extensionId = extensionIdFromOrigin(origin);
+    if (!extensionId) {
+      throw new Error(`Invalid extension origin in ALLOWED_EXTENSION_ORIGINS: ${origin}`);
+    }
+    await pool.query(
+      `INSERT INTO allowed_extension_ids (extension_id, label, enabled)
+       VALUES ($1, $2, TRUE)
+       ON CONFLICT (extension_id) DO NOTHING`,
+      [extensionId, 'Environment bootstrap']
+    );
+  }
+}
 
 const app = express();
 app.disable('x-powered-by');
@@ -326,13 +352,31 @@ function extensionIdFromOrigin(origin) {
   return match?.[1] || '';
 }
 
-function isAllowedExtensionRedirect(value) {
+function normalizeExtensionId(value) {
+  const normalized = String(value || '').trim().toLowerCase().replace(/\/$/, '');
+  const fromOrigin = extensionIdFromOrigin(normalized);
+  if (fromOrigin) return fromOrigin;
+  return extensionIdPattern.test(normalized) ? normalized : '';
+}
+
+async function isAllowedExtensionId(extensionId) {
+  if (!extensionIdPattern.test(String(extensionId || ''))) return false;
+  const result = await pool.query(
+    'SELECT enabled FROM allowed_extension_ids WHERE extension_id = $1 LIMIT 1',
+    [extensionId]
+  );
+  if (result.rows[0]) return result.rows[0].enabled === true;
+  if (isProduction || allowedExtensionOrigins.size > 0) return false;
+  const countResult = await pool.query('SELECT COUNT(*)::int AS count FROM allowed_extension_ids');
+  return Number(countResult.rows[0]?.count || 0) === 0;
+}
+
+async function isAllowedExtensionRedirect(value) {
   try {
     const redirect = new URL(String(value || ''));
     const match = redirect.hostname.match(/^([a-p]{32})\.chromiumapp\.org$/);
     if (redirect.protocol !== 'https:' || !match || redirect.pathname !== '/google') return false;
-    if (allowedExtensionOrigins.size === 0 && !isProduction) return true;
-    return allowedExtensionOrigins.has(`chrome-extension://${match[1]}`);
+    return isAllowedExtensionId(match[1]);
   } catch {
     return false;
   }
@@ -524,25 +568,28 @@ function requireCsrf(req, res, next) {
   next();
 }
 
-function requireAllowedExtensionOrigin(req, res, next) {
-  const origin = String(req.headers.origin || '');
-  if (allowedExtensionOrigins.size > 0 && !allowedExtensionOrigins.has(origin)) {
-    res.status(403).json({ allowed: false, message: 'Extension origin is not allowed.' });
-    return;
-  }
+async function requireAllowedExtensionOrigin(req, res, next) {
+  try {
+    const origin = String(req.headers.origin || '');
+    const extensionId = extensionIdFromOrigin(origin);
+    if (!extensionId || !(await isAllowedExtensionId(extensionId))) {
+      res.status(403).json({ allowed: false, message: 'Extension origin is not allowed.' });
+      return;
+    }
 
-  if (origin && (allowedExtensionOrigins.size === 0 || allowedExtensionOrigins.has(origin))) {
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
     res.setHeader('Vary', 'Origin');
-  }
 
-  if (req.method === 'OPTIONS') {
-    res.status(204).end();
-    return;
+    if (req.method === 'OPTIONS') {
+      res.status(204).end();
+      return;
+    }
+    next();
+  } catch (error) {
+    next(error);
   }
-  next();
 }
 
 function renderLoginPage(errorMessage = '') {
@@ -596,7 +643,7 @@ function renderLoginPage(errorMessage = '') {
   </html>`;
 }
 
-function renderAdminPage(accounts, users, csrfToken, administratorEmail, administratorPictureUrl = '') {
+function renderAdminPage(accounts, users, extensionIds, csrfToken, administratorEmail, administratorPictureUrl = '') {
   const assignedAccountCount = users.reduce((total, user) => total + (Array.isArray(user.ad_accounts) ? user.ad_accounts.length : 0), 0);
   const assignedUserCount = users.filter(user => Array.isArray(user.ad_accounts) && user.ad_accounts.length > 0).length;
   const recentUserCount = users.filter(user => Date.now() - new Date(user.last_seen_at).getTime() <= 7 * 24 * 60 * 60 * 1000).length;
@@ -643,6 +690,14 @@ function renderAdminPage(accounts, users, csrfToken, administratorEmail, adminis
         <button class="danger" type="button" data-confirm-delete data-delete-action="${adminBasePath}/accounts/${account.id}/delete" data-delete-title="سڕینەوەی هەژماری ڕیکلامی" data-delete-message="ئەم هەژمارە لە هەموو بەکارهێنەرە دیاریکراوەکانیش لادەبرێت. ئەم کردارە ناگەڕێتەوە." data-delete-target="${escapeHtml(account.advertiser_id)}" aria-label="سڕینەوەی هەژمار" title="سڕینەوە">${dashboardIcon('trash')}</button>
       </span>
     </div>`).join('');
+  const extensionIdRows = extensionIds.map(item => `
+    <tr class="management-row">
+      <td data-label="ناسنامە"><div class="extension-id-cell"><strong class="technical-value" lang="en" dir="ltr">${escapeHtml(item.extension_id)}</strong><span class="technical-value" lang="en" dir="ltr">chrome-extension://${escapeHtml(item.extension_id)}</span></div></td>
+      <td data-label="ناونیشان">${item.label ? escapeHtml(item.label) : '<span class="muted">بێ ناونیشان</span>'}</td>
+      <td data-label="دۆخ"><span class="status ${item.enabled ? 'enabled' : 'disabled'}">${item.enabled ? 'چالاک' : 'ناچالاک'}</span></td>
+      <td data-label="زیادکراوە"><time class="technical-value" lang="en" dir="ltr" datetime="${escapeHtml(new Date(item.created_at).toISOString())}">${escapeHtml(formatDashboardDate(item.created_at))}</time></td>
+      <td class="actions" data-label="کردارەکان"><form method="post"><input type="hidden" name="_csrf" value="${csrfToken}"><button type="submit" formaction="${adminBasePath}/extension-ids/${item.id}/toggle" aria-label="${item.enabled ? 'ناچالاککردنی ناسنامە' : 'چالاککردنی ناسنامە'}" title="${item.enabled ? 'ناچالاککردن' : 'چالاککردن'}">${dashboardIcon('power')}</button><button class="danger" type="button" data-confirm-delete data-delete-action="${adminBasePath}/extension-ids/${item.id}/delete" data-delete-title="سڕینەوەی ناسنامەی پێوەکراو" data-delete-message="دوای سڕینەوە، ئەو دامەزراندنانەی ئەم ناسنامەیەیان هەیە ناتوانن بچنە ژوورەوە یان سیستەمەکە بەکاربهێنن." data-delete-target="${escapeHtml(item.extension_id)}" aria-label="سڕینەوەی ناسنامە" title="سڕینەوە">${dashboardIcon('trash')}</button></form></td>
+    </tr>`).join('');
   const statistics = renderStatCardGrid([
     renderStatCard({ icon: dashboardIcon('users'), label: 'بەکارهێنەرانی Google', value: users.length, color: 'purple' }),
     renderStatCard({ icon: dashboardIcon('hash'), label: 'دیاریکردنی هەژمارەکان', value: assignedAccountCount, color: 'blue' }),
@@ -717,6 +772,25 @@ function renderAdminPage(accounts, users, csrfToken, administratorEmail, adminis
                 </table>
               </div>
               <div class="table-empty-filter" data-user-search-empty hidden>هیچ بەکارهێنەرێک لەگەڵ گەڕانەکەت ناگونجێت.</div>
+            </section>
+
+            <section class="surface-card table-panel extension-ids-management" id="extension-ids">
+              <div class="section-header management-page-header">
+                <div><span class="section-icon">${dashboardIcon('shield')}</span><div><h2>ناسنامەکانی پێوەکراو</h2><p>ناسنامەکانی Chrome Extension کۆنترۆڵ بکە کە ڕێگەیان پێدراوە لەگەڵ سێرڤەر پەیوەندی بکەن.</p></div></div>
+                <span class="count"><span class="technical-value" lang="en" dir="ltr">${extensionIds.length}</span> ناسنامە</span>
+              </div>
+              <form class="extension-id-form" method="post" action="${adminBasePath}/extension-ids">
+                <label>ناسنامەی پێوەکراو<input class="technical-value" lang="en" dir="ltr" name="extensionId" type="text" maxlength="52" pattern="(?:[a-p]{32}|chrome-extension://[a-p]{32}/?)" placeholder="lbpppleaobeehnhkjegjgelpdmmbicpa" spellcheck="false" autocomplete="off" required><span>ناسنامەی 32 پیت یان chrome-extension:// ناسنامەکە</span></label>
+                <label>ناونیشان<input name="label" type="text" maxlength="100" placeholder="وەک: Chrome Web Store"><span>بۆ ناسینەوەی دامەزراندنەکە، ئارەزوومەندانە</span></label>
+                <button class="primary-button" type="submit">${dashboardIcon('plus')}<span>زیادکردن</span></button>
+                <input type="hidden" name="_csrf" value="${csrfToken}">
+              </form>
+              <div class="table-wrap">
+                <table class="management-table extension-id-table">
+                  <thead><tr><th>ناسنامە</th><th>ناونیشان</th><th>دۆخ</th><th>زیادکراوە</th><th>کردارەکان</th></tr></thead>
+                  <tbody>${extensionIdRows || `<tr><td colspan="5" class="empty"><span class="empty-icon">${dashboardIcon('shield')}</span><strong>هیچ ناسنامەیەک نییە</strong><small>یەکەم ناسنامەی Chrome Extension زیاد بکە.</small></td></tr>`}</tbody>
+                </table>
+              </div>
             </section>
           </main>
 
@@ -795,7 +869,7 @@ app.get('/health', async (_req, res) => {
 app.get('/api/v1/auth/google/start', userLoginLimiter, async (req, res, next) => {
   try {
     const extensionRedirectUri = String(req.query.redirect_uri || '');
-    if (!isAllowedExtensionRedirect(extensionRedirectUri)) {
+    if (!(await isAllowedExtensionRedirect(extensionRedirectUri))) {
       res.status(400).type('text').send('Invalid extension redirect URL.');
       return;
     }
@@ -838,7 +912,7 @@ app.get('/api/v1/auth/google/callback', userLoginLimiter, async (req, res, next)
       [sha256(state)]
     );
     const loginState = stateResult.rows[0];
-    if (!loginState || !isAllowedExtensionRedirect(loginState.extension_redirect_uri)) {
+    if (!loginState || !(await isAllowedExtensionRedirect(loginState.extension_redirect_uri))) {
       res.status(400).type('text').send('The sign-in request is invalid or expired.');
       return;
     }
@@ -897,7 +971,7 @@ app.get('/api/v1/auth/google/callback', userLoginLimiter, async (req, res, next)
     res.redirect(302, appendQuery(loginState.extension_redirect_uri, { code: exchangeCode }));
   } catch (error) {
     console.error('Google extension-user login failed:', error?.message || error);
-    if (isAllowedExtensionRedirect(extensionRedirectUri)) {
+    if (await isAllowedExtensionRedirect(extensionRedirectUri)) {
       res.redirect(302, appendQuery(extensionRedirectUri, { error: 'server_error' }));
       return;
     }
@@ -910,7 +984,7 @@ app.post('/api/v1/auth/exchange', userLoginLimiter, async (req, res, next) => {
   try {
     const code = String(req.body?.code || '');
     const extensionRedirectUri = String(req.body?.redirectUri || '');
-    if (!/^[A-Za-z0-9_-]{32,256}$/.test(code) || !isAllowedExtensionRedirect(extensionRedirectUri)) {
+    if (!/^[A-Za-z0-9_-]{32,256}$/.test(code) || !(await isAllowedExtensionRedirect(extensionRedirectUri))) {
       res.status(400).json({ error: 'Invalid sign-in response.' });
       return;
     }
@@ -1100,7 +1174,7 @@ app.get(`${adminBasePath}/google/callback`, adminLoginLimiter, async (req, res) 
 
 app.get(`${adminBasePath}/dashboard`, requireAdminSession, async (req, res, next) => {
   try {
-    const [accountResult, userResult] = await Promise.all([
+    const [accountResult, userResult, extensionIdResult] = await Promise.all([
       pool.query('SELECT id, advertiser_id, enabled, note, created_at FROM allowed_ad_accounts ORDER BY created_at DESC'),
       pool.query(`
         SELECT u.id, u.email, u.display_name, u.picture_url, u.created_at, u.last_seen_at,
@@ -1114,7 +1188,8 @@ app.get(`${adminBasePath}/dashboard`, requireAdminSession, async (req, res, next
           LEFT JOIN allowed_ad_accounts account ON account.advertiser_id = assignment.advertiser_id
          GROUP BY u.id
          ORDER BY u.last_seen_at DESC
-      `)
+      `),
+      pool.query('SELECT id, extension_id, label, enabled, created_at FROM allowed_extension_ids ORDER BY created_at DESC')
     ]);
     const csrfToken = createCsrfToken();
     setCsrfCookie(res, csrfToken);
@@ -1125,6 +1200,7 @@ app.get(`${adminBasePath}/dashboard`, requireAdminSession, async (req, res, next
     res.type('html').send(renderAdminPage(
       accountResult.rows,
       userResult.rows,
+      extensionIdResult.rows,
       csrfToken,
       administratorEmail,
       String(req.adminSession?.picture || matchingExtensionUser?.picture_url || '')
@@ -1138,6 +1214,95 @@ app.post(`${adminBasePath}/logout`, requireAdminSession, requireCsrf, (req, res)
   res.clearCookie('krd_admin_session', { path: adminBasePath });
   res.clearCookie('admin_csrf', { path: adminBasePath });
   res.redirect(303, `${adminBasePath}/login`);
+});
+
+app.post(`${adminBasePath}/extension-ids`, requireAdminSession, requireCsrf, async (req, res, next) => {
+  try {
+    const extensionId = normalizeExtensionId(req.body?.extensionId);
+    const label = String(req.body?.label || '').trim().slice(0, 100);
+    if (!extensionId) {
+      res.status(400).type('text').send('ناسنامەی پێوەکراو دەبێت 32 پیت بێت و تەنها پیتەکانی a تا p بەکاربهێنێت.');
+      return;
+    }
+    await pool.query(
+      `INSERT INTO allowed_extension_ids (extension_id, label, enabled)
+       VALUES ($1, $2, TRUE)
+       ON CONFLICT (extension_id)
+       DO UPDATE SET label = EXCLUDED.label, enabled = TRUE, updated_at = NOW()`,
+      [extensionId, label]
+    );
+    res.redirect(303, `${adminBasePath}/dashboard#extension-ids`);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post(`${adminBasePath}/extension-ids/:id/toggle`, requireAdminSession, requireCsrf, async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    if (!/^\d+$/.test(req.params.id)) {
+      res.status(400).type('text').send('تۆماری ناسنامەی پێوەکراو نادروستە.');
+      return;
+    }
+    await client.query('BEGIN');
+    await client.query('LOCK TABLE allowed_extension_ids IN SHARE ROW EXCLUSIVE MODE');
+    const current = await client.query('SELECT id, enabled FROM allowed_extension_ids WHERE id = $1', [req.params.id]);
+    if (!current.rows[0]) {
+      await client.query('ROLLBACK');
+      res.status(404).type('text').send('ناسنامەی پێوەکراو نەدۆزرایەوە.');
+      return;
+    }
+    if (current.rows[0].enabled) {
+      const activeCount = await client.query('SELECT COUNT(*)::int AS count FROM allowed_extension_ids WHERE enabled = TRUE');
+      if (Number(activeCount.rows[0]?.count || 0) <= 1) {
+        await client.query('ROLLBACK');
+        res.status(409).type('text').send('ناتوانیت دوا ناسنامەی چالاک ناچالاک بکەیت. سەرەتا ناسنامەیەکی تر زیاد بکە.');
+        return;
+      }
+    }
+    await client.query('UPDATE allowed_extension_ids SET enabled = NOT enabled, updated_at = NOW() WHERE id = $1', [req.params.id]);
+    await client.query('COMMIT');
+    res.redirect(303, `${adminBasePath}/dashboard#extension-ids`);
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    next(error);
+  } finally {
+    client.release();
+  }
+});
+
+app.post(`${adminBasePath}/extension-ids/:id/delete`, requireAdminSession, requireCsrf, async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    if (!/^\d+$/.test(req.params.id)) {
+      res.status(400).type('text').send('تۆماری ناسنامەی پێوەکراو نادروستە.');
+      return;
+    }
+    await client.query('BEGIN');
+    await client.query('LOCK TABLE allowed_extension_ids IN SHARE ROW EXCLUSIVE MODE');
+    const current = await client.query('SELECT id, enabled FROM allowed_extension_ids WHERE id = $1', [req.params.id]);
+    if (!current.rows[0]) {
+      await client.query('ROLLBACK');
+      res.status(404).type('text').send('ناسنامەی پێوەکراو نەدۆزرایەوە.');
+      return;
+    }
+    if (current.rows[0].enabled) {
+      const activeCount = await client.query('SELECT COUNT(*)::int AS count FROM allowed_extension_ids WHERE enabled = TRUE');
+      if (Number(activeCount.rows[0]?.count || 0) <= 1) {
+        await client.query('ROLLBACK');
+        res.status(409).type('text').send('ناتوانیت دوا ناسنامەی چالاک بسڕیتەوە. سەرەتا ناسنامەیەکی تر زیاد بکە.');
+        return;
+      }
+    }
+    await client.query('DELETE FROM allowed_extension_ids WHERE id = $1', [req.params.id]);
+    await client.query('COMMIT');
+    res.redirect(303, `${adminBasePath}/dashboard#extension-ids`);
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    next(error);
+  } finally {
+    client.release();
+  }
 });
 
 app.post(`${adminBasePath}/accounts`, requireAdminSession, requireCsrf, async (req, res, next) => {
